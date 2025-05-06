@@ -6,7 +6,10 @@ import io
 import os
 # 导入中文字体配置
 import font_config
-from data_processor import calculate_statistics, generate_histogram, generate_boxplot
+from data_processor import (
+    calculate_statistics, generate_histogram, generate_boxplot,
+    calculate_parameter_estimates
+)
 
 # 创建示例数据
 def create_example_data():
@@ -89,6 +92,54 @@ def process_example(example_choice):
 
     return stats, hist_fig, box_fig
 
+# 处理参数估计
+def process_parameter_estimation(text_input, estimate_type, confidence_level, threshold=None):
+    if not text_input.strip():
+        return "请输入数据"
+
+    try:
+        # 尝试解析用户输入的数据（逗号、空格或换行符分隔）
+        data = [float(x) for x in text_input.replace(',', ' ').split() if x.strip()]
+        if not data:
+            return "无法解析数据"
+
+        # 转换置信水平为小数
+        confidence_level_value = float(confidence_level.strip('%')) / 100
+
+        # 处理均值估计
+        if estimate_type == "均值估计":
+            result = calculate_parameter_estimates(
+                np.array(data),
+                'mean',
+                confidence_level_value
+            )
+        # 处理比例估计
+        else:  # estimate_type == "比例估计"
+            # 如果提供了阈值
+            if threshold is not None and threshold.strip():
+                try:
+                    threshold_value = float(threshold)
+                    result = calculate_parameter_estimates(
+                        np.array(data),
+                        'proportion',
+                        confidence_level_value,
+                        threshold_value
+                    )
+                except ValueError:
+                    return "阈值格式错误，请输入有效的数字"
+            # 如果没有提供阈值，使用数据的中位数作为默认阈值
+            else:
+                result = calculate_parameter_estimates(
+                    np.array(data),
+                    'proportion',
+                    confidence_level_value
+                )
+                return f"注意：未提供阈值，系统自动使用数据的中位数作为阈值。\n\n{result}"
+
+        return result
+    except ValueError:
+        return "数据格式错误，请确保输入的是数字，并用逗号、空格或换行符分隔"
+
 # 创建Gradio界面
 with gr.Blocks(title="StatEase - 简易统计分析工具") as app:
     gr.Markdown("# StatEase - 简易统计分析工具")
@@ -154,13 +205,62 @@ with gr.Blocks(title="StatEase - 简易统计分析工具") as app:
                 outputs=[example_output, hist_output3, box_output3]
             )
 
+        with gr.TabItem("参数估计"):
+            param_text_input = gr.Textbox(
+                label="输入数据（用逗号、空格或换行符分隔）",
+                placeholder="例如: 1, 2, 3, 4, 5",
+                lines=5
+            )
+            with gr.Row():
+                estimate_type = gr.Radio(
+                    ["均值估计", "比例估计"],
+                    label="估计类型",
+                    value="均值估计"
+                )
+                confidence_level = gr.Dropdown(
+                    ["90%", "95%", "99%"],
+                    label="置信水平",
+                    value="95%"
+                )
+
+            # 阈值输入框（初始状态下隐藏）
+            threshold_input = gr.Textbox(
+                label="阈值（仅用于比例估计，大于等于此值视为'成功'）",
+                placeholder="例如: 50",
+                visible=False,
+                interactive=True
+            )
+
+            # 当估计类型改变时，控制阈值输入框的显示/隐藏
+            def update_threshold_visibility(estimate_type_value):
+                return gr.update(visible=(estimate_type_value == "比例估计"))
+
+            estimate_type.change(
+                fn=update_threshold_visibility,
+                inputs=[estimate_type],
+                outputs=[threshold_input]
+            )
+
+            param_button = gr.Button("计算参数估计")
+            param_output = gr.Markdown(label="参数估计结果")
+
+            param_button.click(
+                fn=process_parameter_estimation,
+                inputs=[param_text_input, estimate_type, confidence_level, threshold_input],
+                outputs=[param_output]
+            )
+
     gr.Markdown("""
     ## 使用说明
     1. **上传数据**: 上传CSV格式的数据文件进行分析
     2. **手动输入**: 直接输入数据值，用逗号、空格或换行符分隔
     3. **示例数据**: 选择预设的示例数据集进行分析
+    4. **参数估计**: 计算样本均值和比例的点估计与区间估计
+       - 均值估计: 计算样本均值及其置信区间
+       - 比例估计: 计算样本比例及其置信区间（需设置阈值）
+       - 可选择不同的置信水平（90%、95%、99%）
 
-    分析结果包括基本统计量（均值、中位数、标准差等）和数据可视化。
+    分析结果包括基本统计量（均值、中位数、标准差等）、数据可视化和参数估计。
     """)
 
 # 启动应用

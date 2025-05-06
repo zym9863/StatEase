@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import stats
+import math
 # 导入中文字体配置
 import font_config
 
@@ -142,3 +143,137 @@ def generate_boxplot(data, title="数据分布"):
     ax.grid(True, alpha=0.3, axis='x')
     plt.tight_layout()
     return fig
+
+def calculate_mean_confidence_interval(data, confidence_level=0.95):
+    """
+    计算样本均值的置信区间
+
+    参数:
+    - data: 数据数组
+    - confidence_level: 置信水平，默认为0.95 (95%)
+
+    返回:
+    - 均值点估计和置信区间的Markdown格式结果
+    """
+    if len(data) < 2:
+        return "样本量不足，无法计算置信区间（至少需要2个观测值）"
+
+    # 计算样本均值（点估计）
+    mean = np.mean(data)
+
+    # 计算样本标准差
+    std_dev = np.std(data, ddof=1)  # 使用无偏估计 (n-1)
+
+    # 样本量
+    n = len(data)
+
+    # 计算标准误
+    std_error = std_dev / math.sqrt(n)
+
+    # 计算t临界值
+    alpha = 1 - confidence_level
+    t_critical = stats.t.ppf(1 - alpha/2, df=n-1)
+
+    # 计算置信区间
+    margin_of_error = t_critical * std_error
+    lower_bound = mean - margin_of_error
+    upper_bound = mean + margin_of_error
+
+    # 格式化结果为Markdown
+    result = f"""### 均值的参数估计 (置信水平: {confidence_level*100:.0f}%)
+
+| 估计类型 | 值 |
+|--------|----|
+| 样本均值 (点估计) | {mean:.4f} |
+| 标准误 | {std_error:.4f} |
+| 置信区间下限 | {lower_bound:.4f} |
+| 置信区间上限 | {upper_bound:.4f} |
+| 误差幅度 | ±{margin_of_error:.4f} |
+
+### 解读
+
+- **点估计**: 样本均值 {mean:.4f} 是总体均值的最佳单点估计
+- **置信区间**: 以 {confidence_level*100:.0f}% 的置信水平，总体均值落在区间 [{lower_bound:.4f}, {upper_bound:.4f}] 内
+- **精确度**: 误差幅度为 ±{margin_of_error:.4f}，样本量越大，区间越窄，估计越精确
+"""
+
+    return result
+
+def calculate_proportion_confidence_interval(data, threshold, confidence_level=0.95):
+    """
+    计算样本比例的置信区间
+
+    参数:
+    - data: 数据数组
+    - threshold: 阈值，用于确定成功/失败（大于等于阈值为成功）
+    - confidence_level: 置信水平，默认为0.95 (95%)
+
+    返回:
+    - 比例点估计和置信区间的Markdown格式结果
+    """
+    if len(data) < 30:
+        return "样本量不足，建议使用至少30个观测值来估计比例的置信区间"
+
+    # 计算样本比例（点估计）
+    successes = sum(1 for x in data if x >= threshold)
+    n = len(data)
+    p_hat = successes / n
+
+    # 计算标准误
+    std_error = math.sqrt((p_hat * (1 - p_hat)) / n)
+
+    # 计算z临界值
+    alpha = 1 - confidence_level
+    z_critical = stats.norm.ppf(1 - alpha/2)
+
+    # 计算置信区间
+    margin_of_error = z_critical * std_error
+    lower_bound = max(0, p_hat - margin_of_error)  # 确保下限不小于0
+    upper_bound = min(1, p_hat + margin_of_error)  # 确保上限不大于1
+
+    # 格式化结果为Markdown
+    result = f"""### 比例的参数估计 (置信水平: {confidence_level*100:.0f}%)
+
+| 估计类型 | 值 |
+|--------|----|
+| 阈值 | {threshold:.4f} |
+| 样本比例 (点估计) | {p_hat:.4f} ({successes}/{n}) |
+| 标准误 | {std_error:.4f} |
+| 置信区间下限 | {lower_bound:.4f} |
+| 置信区间上限 | {upper_bound:.4f} |
+| 误差幅度 | ±{margin_of_error:.4f} |
+
+### 解读
+
+- **点估计**: 样本中 {p_hat*100:.1f}% 的观测值大于等于阈值 {threshold:.4f}
+- **置信区间**: 以 {confidence_level*100:.0f}% 的置信水平，总体比例落在区间 [{lower_bound:.4f}, {upper_bound:.4f}] 内
+- **精确度**: 误差幅度为 ±{margin_of_error:.4f}，样本量越大，区间越窄，估计越精确
+"""
+
+    return result
+
+def calculate_parameter_estimates(data, estimate_type, confidence_level=0.95, threshold=None):
+    """
+    计算参数估计（点估计和区间估计）
+
+    参数:
+    - data: 数据数组
+    - estimate_type: 估计类型 ('mean' 或 'proportion')
+    - confidence_level: 置信水平，默认为0.95 (95%)
+    - threshold: 用于比例估计的阈值，仅当estimate_type='proportion'时使用
+
+    返回:
+    - 参数估计的Markdown格式结果
+    """
+    if len(data) == 0:
+        return "数据为空，无法进行参数估计"
+
+    if estimate_type == 'mean':
+        return calculate_mean_confidence_interval(data, confidence_level)
+    elif estimate_type == 'proportion':
+        if threshold is None:
+            # 如果未提供阈值，使用数据的中位数作为默认阈值
+            threshold = np.median(data)
+        return calculate_proportion_confidence_interval(data, threshold, confidence_level)
+    else:
+        return f"不支持的估计类型: {estimate_type}。请选择 'mean' 或 'proportion'。"

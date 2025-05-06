@@ -16,6 +16,11 @@ StatEase is a simple statistical analysis tool based on Python and Gradio, focus
   - Distribution characteristics (skewness, kurtosis)
   - Outlier detection
 
+- **Parameter Estimation**:
+  - Point estimation (sample mean, sample proportion)
+  - Interval estimation (confidence intervals for mean and proportion)
+  - Selectable confidence levels (90%, 95%, 99%)
+
 - **Data Visualization**:
   - Histogram (with kernel density estimation)
   - Box plot (with data point distribution)
@@ -30,10 +35,10 @@ StatEase is a simple statistical analysis tool based on Python and Gradio, focus
    ```bash
    # Create virtual environment
    python -m venv venv
-   
+
    # Activate virtual environment (Windows)
    venv\Scripts\activate
-   
+
    # Activate virtual environment (Linux/Mac)
    source venv/bin/activate
    ```
@@ -78,3 +83,12 @@ This project can be directly deployed to Hugging Face Spaces:
 1. Switch to the "Example Data" tab
 2. Select an example dataset from the dropdown menu
 3. Click the "Analyze" button to get results
+
+### Parameter Estimation
+
+1. Switch to the "Parameter Estimation" tab
+2. Enter data in the text box, separated by commas, spaces, or line breaks
+3. Select the estimation type (mean estimation or proportion estimation)
+4. Choose a confidence level (90%, 95%, or 99%)
+5. If proportion estimation is selected, enter a threshold value (values greater than or equal to this are considered "successes")
+6. Click the "Calculate Parameter Estimation" button to get results
