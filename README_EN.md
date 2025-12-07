@@ -21,7 +21,11 @@ StatEase is a simple statistical analysis tool based on Python and Gradio, focus
   - Interval estimation (confidence intervals for mean and proportion)
   - Selectable confidence levels (90%, 95%, 99%)
 
-- **Data Visualization**:
+ - **Correlation Analysis**:
+  - Supports Pearson and Spearman correlation coefficients
+  - Includes example datasets with one-click loading and visualization of scatter plots with fitted lines
+
+ - **Data Visualization**:
   - Histogram (with kernel density estimation)
   - Box plot (with data point distribution)
 
@@ -71,6 +75,13 @@ This project can be directly deployed to Hugging Face Spaces:
 1. Switch to the "Upload Data" tab
 2. Click the upload button to select a CSV file
 3. Click the "Analyze" button to get results
+
+### Correlation Analysis
+
+1. Switch to the "Correlation Analysis" tab
+2. Upload a CSV file containing at least two numeric columns, or click "Use Example Data"
+3. From the dropdowns, select the two columns to analyze and choose the correlation method (Pearson or Spearman)
+4. Click the "Compute Correlation" button to view the correlation coefficient, p-value, and scatter plot with a fitted line
 
 ### Manual Input
 

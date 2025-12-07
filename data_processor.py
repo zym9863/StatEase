@@ -6,6 +6,62 @@ import math
 # 导入中文字体配置
 import font_config
 
+
+def calculate_correlation(df, col_x, col_y, method='pearson'):
+    """计算相关性并生成散点图"""
+    # 提取需要分析的两列
+    series_x = df[col_x].dropna()
+    series_y = df[col_y].dropna()
+
+    # 对齐索引，确保配对数据一致
+    aligned = pd.concat([series_x, series_y], axis=1, join='inner').dropna()
+    if len(aligned) < 3:
+        return "有效样本量不足，至少需要3个配对观测值", None
+
+    x_vals = aligned.iloc[:, 0].astype(float)
+    y_vals = aligned.iloc[:, 1].astype(float)
+
+    # 选择相关系数计算方法
+    if method == 'spearman':
+        corr_coef, p_value = stats.spearmanr(x_vals, y_vals)
+        method_label = "Spearman 相关系数"
+    else:
+        corr_coef, p_value = stats.pearsonr(x_vals, y_vals)
+        method_label = "Pearson 相关系数"
+
+    # 生成散点图及回归拟合线
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.scatter(x_vals, y_vals, alpha=0.7, color='#5B9BD5', label='数据点')
+
+    # 简单线性回归拟合
+    slope, intercept = np.polyfit(x_vals, y_vals, 1)
+    reg_x = np.linspace(x_vals.min(), x_vals.max(), 100)
+    reg_y = slope * reg_x + intercept
+    ax.plot(reg_x, reg_y, color='#D9534F', linewidth=2, label='回归拟合线')
+
+    ax.set_xlabel(col_x)
+    ax.set_ylabel(col_y)
+    ax.set_title(f"{col_x} 与 {col_y} 的相关性")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    result = f"""### {method_label}
+
+| 指标 | 数值 |
+|------|------|
+| 样本数 | {len(aligned)} |
+| 相关系数 | {corr_coef:.4f} |
+| p 值 | {p_value:.4f} |
+
+### 解读
+- |r| 越接近 1，线性关联越强；越接近 0，线性关联越弱
+- p 值越小，拒绝“无相关”原假设的证据越强，通常 p < 0.05 视为显著相关
+- 回归线仅用于趋势参考，非因果关系说明
+"""
+
+    return result, fig
+
 def calculate_statistics(data):
     """计算描述性统计量并返回格式化的结果"""
     if len(data) == 0:

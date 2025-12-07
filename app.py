@@ -8,8 +8,23 @@ import os
 import font_config
 from data_processor import (
     calculate_statistics, generate_histogram, generate_boxplot,
-    calculate_parameter_estimates
+    calculate_parameter_estimates, calculate_correlation
 )
+
+
+# 确保本地请求不经过代理，避免 Gradio 自检时触发 502
+def ensure_local_no_proxy():
+    """确保本地回环地址不走 HTTP/HTTPS 代理，避免 Gradio 启动自检 502。"""
+    no_proxy_hosts = {"127.0.0.1", "localhost"}
+    for key in ("NO_PROXY", "no_proxy"):
+        existing = os.environ.get(key, "")
+        hosts = {h.strip() for h in existing.split(',') if h.strip()}
+        merged = ','.join(sorted(hosts.union(no_proxy_hosts)))
+        os.environ[key] = merged
+
+
+# 相关性示例数据文件路径
+CORRELATION_EXAMPLE_FILE = 'example_data/correlation_example.csv'
 
 # 创建示例数据
 def create_example_data():
@@ -30,12 +45,70 @@ def create_example_data():
                                  np.random.normal(loc=70, scale=5, size=50)])
     pd.DataFrame(bimodal_data, columns=['value']).to_csv('example_data/bimodal_distribution.csv', index=False)
 
+    # 创建相关性分析示例数据（正相关 + 轻微噪声）
+    x = np.linspace(20, 80, 150)
+    y = 2.5 * x + np.random.normal(scale=30, size=len(x))
+    z = y + np.random.normal(scale=25, size=len(y))
+    corr_df = pd.DataFrame({
+        'study_hours': x,
+        'exam_score': y,
+        'practice_hours': z
+    })
+    corr_df.to_csv(CORRELATION_EXAMPLE_FILE, index=False)
+
     return ['example_data/normal_distribution.csv',
             'example_data/skewed_distribution.csv',
             'example_data/bimodal_distribution.csv']
 
 # 确保示例数据存在
 example_files = create_example_data()
+
+
+def process_correlation_file(file):
+    """从上传的CSV加载相关性分析数据"""
+    if file is None:
+        return "请先上传CSV文件", gr.update(choices=[], value=None), gr.update(choices=[], value=None), None
+
+    df = pd.read_csv(file.name)
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    if len(numeric_cols) < 2:
+        return "需要至少两列数值列用于相关性分析", gr.update(choices=[], value=None), gr.update(choices=[], value=None), None
+
+    default_x = numeric_cols[0]
+    default_y = numeric_cols[1] if len(numeric_cols) > 1 else numeric_cols[0]
+    return (
+        f"已加载 {os.path.basename(file.name)}，请选择两列进行分析。",
+        gr.update(choices=numeric_cols, value=default_x),
+        gr.update(choices=numeric_cols, value=default_y),
+        df
+    )
+
+
+def process_correlation_example():
+    """加载预设的相关性示例数据"""
+    df = pd.read_csv(CORRELATION_EXAMPLE_FILE)
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    default_x = numeric_cols[0]
+    default_y = numeric_cols[1] if len(numeric_cols) > 1 else numeric_cols[0]
+    return (
+        "已加载示例数据（study_hours, exam_score, practice_hours）",
+        gr.update(choices=numeric_cols, value=default_x),
+        gr.update(choices=numeric_cols, value=default_y),
+        df
+    )
+
+
+def run_correlation_analysis(df, col_x, col_y, method):
+    """执行相关性计算并返回结果"""
+    if df is None:
+        return "请先加载数据集", None
+    if not col_x or not col_y:
+        return "请选择要分析的两列", None
+    if col_x == col_y:
+        return "请选择不同的列进行相关性分析", None
+
+    result, fig = calculate_correlation(df, col_x, col_y, method.lower())
+    return result, fig
 
 # 处理上传的CSV文件
 def process_file(file):
@@ -205,6 +278,49 @@ with gr.Blocks(title="StatEase - 简易统计分析工具") as app:
                 outputs=[example_output, hist_output3, box_output3]
             )
 
+        with gr.TabItem("相关性分析"):
+            corr_state = gr.State()
+            gr.Markdown("选择两列数值数据，计算 Pearson 或 Spearman 相关系数，并查看散点图与拟合线。")
+
+            with gr.Row():
+                corr_file = gr.File(label="上传CSV文件（至少包含两列数值列）")
+                load_corr_btn = gr.Button("从上传文件加载")
+                load_corr_example_btn = gr.Button("使用示例数据")
+
+            corr_status = gr.Markdown("等待加载数据…")
+
+            with gr.Row():
+                corr_col_x = gr.Dropdown(label="X轴列", choices=[], interactive=True)
+                corr_col_y = gr.Dropdown(label="Y轴列", choices=[], interactive=True)
+
+            corr_method = gr.Radio(
+                ["Pearson", "Spearman"],
+                label="相关性方法",
+                value="Pearson"
+            )
+
+            calc_corr_btn = gr.Button("计算相关性")
+            corr_output = gr.Markdown(label="相关性结果")
+            corr_plot = gr.Plot(label="散点图与回归线")
+
+            load_corr_btn.click(
+                fn=process_correlation_file,
+                inputs=[corr_file],
+                outputs=[corr_status, corr_col_x, corr_col_y, corr_state]
+            )
+
+            load_corr_example_btn.click(
+                fn=process_correlation_example,
+                inputs=[],
+                outputs=[corr_status, corr_col_x, corr_col_y, corr_state]
+            )
+
+            calc_corr_btn.click(
+                fn=run_correlation_analysis,
+                inputs=[corr_state, corr_col_x, corr_col_y, corr_method],
+                outputs=[corr_output, corr_plot]
+            )
+
         with gr.TabItem("参数估计"):
             param_text_input = gr.Textbox(
                 label="输入数据（用逗号、空格或换行符分隔）",
@@ -265,10 +381,24 @@ with gr.Blocks(title="StatEase - 简易统计分析工具") as app:
 
 # 启动应用
 if __name__ == "__main__":
+    ensure_local_no_proxy()
+    default_port = int(os.getenv("PORT", "7860"))
+
     # 检查是否在Hugging Face Spaces环境中运行
     if os.getenv("SPACE_ID"):
         # 如果在Hugging Face Spaces环境中运行，使用特定配置
-        app.launch(share=False)
+        app.launch(
+            share=False,
+            server_name="0.0.0.0",
+            server_port=default_port,
+            show_error=True,
+            inbrowser=False
+        )
     else:
         # 本地运行配置
-        app.launch()
+        app.launch(
+            share=False,
+            server_name=os.getenv("SERVER_NAME", "127.0.0.1"),
+            server_port=default_port,
+            show_error=True
+        )
